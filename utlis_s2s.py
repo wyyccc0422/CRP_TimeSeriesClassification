@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import statistics
 
-def get_markers_rocket_order(f_mean,f_std,df_test_log, well, pred_column, wsize, input_variable, model,constraints=False):
+def get_markers_rocket_order(f_mean,f_std,df_test_log, well, pred_column, wsize, input_variable, model):
     """ 
     Predict marker depths for one well without any constraints
     
@@ -59,42 +59,10 @@ def get_markers_rocket_order(f_mean,f_std,df_test_log, well, pred_column, wsize,
 
     #=========Prediction Depth For Each Marker=============#
 
-    if constraints:
-        previous_depth = 0 # Checking depth for the previous marker
-        for i,top in enumerate(pred_column):
-            if top != 'None':
-                md = df_wmn[df_wmn[top] == df_wmn[top].max()].Depth
-                ym = statistics.median(md)
-                a = 1
-                if i == 1: # MARCEL 
-                    while ym <= 5000: # Constraint for first marker(M should not start too early)
-                        a += 1
-                        md = df_wmn[df_wmn[top] == df_wmn[top].max()].Depth
-                        ym = statistics.median(md)
-                    previous_depth = ym 
-                    pred_m.append(ym)
-
-                elif i == 2: #Constraint for predicting Sylavain (S should not be too far from M)
-                    a = 1
-                    while ym <= previous_depth  or ym - previous_depth > 330:
-                        a += 1
-                        md = df_wmn[df_wmn[top] == df_wmn[top].nlargest(a).iloc[-1]].Depth
-                        ym = statistics.median(md)
-                    previous_depth = ym 
-                    pred_m.append(ym) 
-                elif i == 3: #Constraint for predicting CONRAD (C should not be in front of S)
-                    a = 1
-                    while ym <= previous_depth or ym - previous_depth > 200 :
-                        a += 1
-                        md = df_wmn[df_wmn[top] == df_wmn[top].nlargest(a).iloc[-1]].Depth
-                        ym = statistics.median(md)
-
-                    pred_m.append(ym)
-    else:
-        for top in pred_column:
-            if top != 'None':
-                md = df_wmn[df_wmn[top] == df_wmn[top].max()].Depth
-                ym = statistics.median(md)
-                pred_m.append(ym)
+    for top in pred_column:
+        if top != 'None':
+            md = df_wmn[df_wmn[top] == df_wmn[top].max()].Depth
+            ym = statistics.median(md)
+            pred_m.append(ym)
 
     return pred_m, df_wm

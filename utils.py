@@ -178,7 +178,7 @@ def plot_pred_distribution(td, pred_m, df_wm):
     ax1.set_ylabel('Probability')
     #plt.plot(df_gr[5500:]['GR'], color = 'black')
     ax1.fill_between(df_wm[5500:]['Depth'], df_wm[5500:]['Marcel']*100,  color = 'lightcoral', alpha = 0.5, label= 'prob_M')
-    ax1.fill_between(df_wm[5500:]['Depth'], df_wm[5500:]['Sylvian']*100, color = 'lightblue', alpha = 0.5, label= 'prob_S')
+    ax1.fill_between(df_wm[5500:]['Depth'], df_wm[5500:]['Sylvain']*100, color = 'lightblue', alpha = 0.5, label= 'prob_S')
     ax1.fill_between(df_wm[5500:]['Depth'], df_wm[5500:]['Conrad']*100, color = 'lightgreen', alpha = 0.5, label= 'prob_C')
     #ax2.legend()
 
@@ -309,88 +309,6 @@ def get_markers_rocket_order(f_mean,f_std,df_test_log, well, pred_column, wsize,
             ym = statistics.median(md)
             pred_m.append(ym)
 
-    return pred_m, df_wm
-
-
-def get_markers_rocket_order_with_constraints(f_mean,f_std,df_test_log, well, pred_column, wsize, input_variable,rocket, classifier_xgb,classifier, xgb):
-    """ 
-    Predict marker depths for one well while considering constraints between certain markers.
-    
-    Parameters
-    ----------
-        f_mean [array]:  Mean values of X_train used for normalization.
-        f_std [array] :  Standard deviation values of X_train used for normalization.
-        df_test_log [DataFrame]: DataFrame containing test data.
-        well : index of the well being analyzed.
-        pred_column [list]: Predicted column names >> ["MARCEL","SYLVAIN","CONRAD"]
-        wsize [int]: Window size for data processing.
-        input_variable [list]: input variables used for prediction >> ["GR"]
-                               only consider uni-varaite case for now
-        classifier_xgb : XGBoost classifier for prediction
-        classifier : Logistic classifier for prediction
-        xgb [bool]: whether XGBoost is used.
-   
-    Returns
-    -------
-        pred_m [list]: Predicted depths for each marker considering constraints.
-        df_wm [DataFrame]: DataFrame containing predicted probabilities for all markers.
-    """
-
-    df_gr = dfwellgr(well, df_test_log, input_variable)
-    well_seq, dep_seq = window(df_gr, wsize)
-
-    try:
-        test_dr_well = rocket.transform(well_seq)
-    except Exception as e:
-        well_seq = well_seq.reshape(well_seq.shape[0], -1)
-        test_dr_well = rocket.transform(well_seq)
-
-    # normalize 'per feature'
-    test_well = (test_dr_well - f_mean) / f_std
-
-    if xgb:
-        test_prob = classifier_xgb.predict_proba(test_well)
-    else:
-        test_prob = classifier.predict_proba(test_well)
-
-
-    df_wm = pd.DataFrame(test_prob, columns=pred_column)
-    df_wm['Depth'] = dep_seq
-
-    if 'Depth' not in df_gr.columns:
-        df_gr['Depth'] = df_gr.index
-
-    df_wm = df_gr.merge(df_wm, how = 'inner', left_on = 'Depth', right_on = 'Depth')
-    pred_m = []
-    df_wmn = df_wm
-
-    #=========Prediction Depth For Each Marker=============#
-
-    previous_depth = 0 # Checking depth for the previous marker
-    for i,top in enumerate(pred_column):
-        if top != 'None':
-            md = df_wmn[df_wmn[top] == df_wmn[top].max()].Depth
-            ym = statistics.median(md)
-            if i == 1: # MARCEL (Normal Prediction)
-                previous_depth = ym 
-                pred_m.append(ym)
-
-            elif i == 2: #Constraint for predicting Sylavain (S should not be too far from M)
-                a = 1
-                while ym <= previous_depth  or ym - previous_depth > 330:
-                    a += 1
-                    md = df_wmn[df_wmn[top] == df_wmn[top].nlargest(a).iloc[-1]].Depth
-                    ym = statistics.median(md)
-                previous_depth = ym 
-                pred_m.append(ym) 
-            elif i == 3: #Constraint for predicting CONRAD (C should not be in front of S)
-                a = 1
-                while ym <= previous_depth or ym - previous_depth > 200 :
-                    a += 1
-                    md = df_wmn[df_wmn[top] == df_wmn[top].nlargest(a).iloc[-1]].Depth
-                    ym = statistics.median(md)
-
-                pred_m.append(ym)
     return pred_m, df_wm
 
 
