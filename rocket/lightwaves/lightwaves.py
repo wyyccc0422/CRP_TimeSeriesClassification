@@ -7,23 +7,6 @@ from rocket.lightwaves.lightwaves_utils import ScalePerChannel, anova_feature_se
     ckd_to_kernels, get_fixed_candidate_kernels, get_ckd_matrix_with_features
 
 
-def anova_feature_selection(X, y, N):
-    """
-    Returns the top N features using ANOVA method.
-    :param X: Features array
-    :param y: Target labels
-    :param N: Number of features to select
-    :return: (idces,scores): Indices of selected features, ascores based on ANOVA
-    """
-    var_mask = VarianceThreshold().fit(X).get_support()
-    or_idx = np.zeros(X.shape[1], dtype=bool)
-    X_v = np.round(X[:, var_mask].copy(), 7)  # Quick fix for weird numerical precision issue
-    scores = np.nan_to_num(f_classif(X_v, y)[0], posinf=0, neginf=0)
-    idces = np.argsort(scores)[::-1][:N]
-    true_idces = np.where(var_mask)[0][idces]
-    or_idx[true_idces] = True
-    return np.where(or_idx)[0], scores[true_idces]
-
 def transform(X, matrix, feat_mask, candidate_kernels, dilations):
     """
     Transform input array to LightWaveS features
@@ -38,14 +21,30 @@ def transform(X, matrix, feat_mask, candidate_kernels, dilations):
     feats = _apply_2layer_kernels(X, kernels)
     return feats[:, feat_mask]
 
+
+"""
+In the public repository of LightWaveS (https://github.com/lpphd/lightwaves/tree/main),
+The author does not define the LightWaveS as a Class Method, 
+Thus, for the purpose of this project, 
+& to allow any function that takes a ROCKET object as input to call `fit` and `transform` methods uniformly, regardless of the specific ROCKET class used,
+We converted the python script into the object-oriented programming (LightWaveS Class).
+
+Specifically:
+        - Reference python scrpt we used: `lightwaves_l1l2_UCR_example.py` and `lightwaves_l1l2_MAFAULDA_example.py` 
+          in which the authors of lightwaves repository showed examples of applying lightwaves on two datasets. 
+        - Removed the use of sample size as for our project we are using the whole dataset. --> No need to take the sample
+        - Removed the use of MPI because it can't be imported
+       
+"""
+
+
 class LightWaveS:
-    def __init__(self, seed=0, sample_size=1500, final_num_feat=500, max_dilation=32):
+    def __init__(self, seed=0, final_num_feat=500, max_dilation=32):
         self.seed = seed
-        self.sample_size = sample_size
-        self.final_num_feat = final_num_feat
+        self.final_num_feat = final_num_feat  ##Final number of features
         self.max_dilation = max_dilation
         self.features_number = 8  ## 4 features per scattering level
-        self.pre_final_feat_num = 3 * final_num_feat
+        self.pre_final_feat_num = 3 * final_num_feat  ## Pool of features selected on each node, before the final selection.
         self.dilations = np.arange(0, np.log2(max_dilation) + 1).astype(np.int32)
         self.n_dilations = self.dilations.size
 

@@ -5,6 +5,8 @@
 from numba import njit, prange
 import numpy as np
 
+
+#Original Function
 def precompute_kernel_parameters(n_kernels, n_timestamps, kernel_sizes, seed):
     np.random.seed(seed)
 
@@ -17,6 +19,8 @@ def precompute_kernel_parameters(n_kernels, n_timestamps, kernel_sizes, seed):
 
     return lengths, cumsum_lengths, weights_all, biases, upper_bounds, padding_cond
 
+
+#Optimised Kernel Generation Function
 @njit()
 def generate_kernels_optimized(lengths, cumsum_lengths, weights_all, biases, upper_bounds, padding_cond, n_kernels, kernel_sizes, n_timestamps):
     weights = np.zeros((n_kernels, np.int64(np.max(kernel_sizes))))
@@ -36,7 +40,16 @@ def generate_kernels_optimized(lengths, cumsum_lengths, weights_all, biases, upp
 
 
 
+"""
+Based on the pyts ROCKET source code, we created a new `apply_all_kernels` function whiich replaced the following two functions:
+    - apply_one_kernel_one_sample
+    - apply_all_kernels
 
+Specifically by mergering these two functions into one, we:
+        - Optimised the inner loop which applies the convolutional kernel to each time series
+        - Parallelize the outer loop while keeping the inner loop sequential.
+"""
+#Adjusted Function
 @njit(parallel=True, fastmath=True)
 def apply_all_kernels(X, weights, lengths, biases, dilations, paddings):
     """

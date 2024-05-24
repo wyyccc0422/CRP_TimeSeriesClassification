@@ -1,3 +1,14 @@
+
+"""
+@INPROCEEDINGS{pantiskas2022lightwaves,
+  author={Pantiskas, Leonardos and Verstoep, Kees and Hoogendoorn, Mark and Bal, Henri},
+  booktitle={2022 18th International Conference on Distributed Computing in Sensor Systems (DCOSS)}, 
+  title={{Taking ROCKET on an Efficiency Mission: Multivariate Time Series Classification with LightWaveS}}, 
+  year={2022},
+  pages={149-152},
+  doi={10.1109/DCOSS54816.2022.00036}}
+"""
+
 from numba import njit, prange
 from sklearn.feature_selection import VarianceThreshold, f_classif
 import numpy as np
@@ -132,7 +143,7 @@ def mrmr_feature_selection(X, y, K=100):
     original_scores = original_scores[sorted_indices]
     return idces, out_scores, original_scores
 
-
+#Adjusted Function
 def anova_feature_selection(X, y, N=100):
     """
     Returns the top N features using ANOVA method.
@@ -142,7 +153,7 @@ def anova_feature_selection(X, y, N=100):
     :return: (idces,scores): Indices of selected features, ascores based on ANOVA
     """
     var_mask = VarianceThreshold().fit(X).get_support()
-    or_idx = np.zeros(X.shape[1], dtype=np.bool)
+    or_idx = np.zeros(X.shape[1], dtype=bool) ## Replace np.bool to bool as it is deprecated 
     X_v = np.round(X[:, var_mask].copy(), 7)  # Quick fix for weird numerical precision issue
     scores = np.nan_to_num(f_classif(X_v, y)[0], posinf=0, neginf=0)
     idces = np.argsort(scores)[::-1][:N]
@@ -153,7 +164,6 @@ def anova_feature_selection(X, y, N=100):
     or_idx[np.where(var_mask)[0][idces]] = True
     idces = np.where(or_idx)[0].astype(np.int32)
     return idces, scores
-
 
 def ckd_to_kernels(ckd, candidate_kernels, candidate_dilations):
     """
