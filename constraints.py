@@ -4,15 +4,91 @@ import statistics
 from scipy.stats import norm
 from utils import dfwellgr,window
 import torch
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
+import scipy as sp
 
-def get_empirical_cdf_intervals( df_tops, confidence_level=0.96):
-    intervals = {}
+
+
+    
+
+
+def fit_gaussian_process(df_tops, confidence_level=0.96):
+    """
+    Fits a Gaussian process regression model for depth measurements and find the confidence intervals.
+
+    Returns:
+    -----------
+       intervals [dict]: A dictionary containing confidence intervals for each marker.
+    """
+    intervals ={}
     for marker in df_tops.columns:
-        depths = df_tops[marker].dropna()
-        lower_bound = np.percentile(depths, (1 - confidence_level) / 2 * 100)
-        upper_bound = np.percentile(depths, (1 + confidence_level) / 2 * 100)
-        intervals[marker] = (lower_bound, upper_bound)
+        y = df_tops[marker].dropna().values
+        X = np.atleast_2d(np.arange(len(y))).T	# creates a 2d column vectors of indices (based on len(y)) // each represent the position of each depth measurement in the array
+        
+        kernel = C(1.0, (1e-3, 1e3)) * RBF(length_scale=1.0, length_scale_bounds=(1e-4, 1e2))
+
+        gp = GaussianProcessRegressor(kernel=kernel, alpha=1e-10, normalize_y=True)
+        gp.fit(X, y)
+        
+        # Predict with confidence intervals
+        y_pred, sigma = gp.predict(X, return_std=True)
+        confidence_interval = sigma * np.sqrt(2) * sp.special.erfinv(confidence_level)
+        
+        lower_b = np.min(y_pred - confidence_interval)
+        upper_b = np.max( y_pred + confidence_interval)
+
+        intervals[marker] = (lower_b,upper_b)
+
     return intervals
+
+def fit_lognormal_process(df_tops, confidence_level=0.96):
+    """
+    Fits a Gaussian process regression model for depth measurements and find the confidence intervals.
+    Using log-normal distribution.
+   
+    Returns:
+    -----------
+       intervals [dict]: A dictionary containing confidence intervals for each marker.
+    """
+    intervals ={}
+    for marker in df_tops.columns:
+        ## transform to log
+        y = np.log(df_tops[marker].dropna().values)
+        X = np.atleast_2d(np.arange(len(y))).T
+        
+        ## Kernel for Gaussian Process (because logNORMAL)
+        kernel = C(1.0, (1e-3, 1e3)) * RBF(length_scale=1.0, length_scale_bounds=(1e-4, 1e2))
+        gp = GaussianProcessRegressor(kernel=kernel, alpha=1e-10, normalize_y=True)
+        gp.fit(X, y)
+        
+        # Predict on the training data to get mean and var
+        y_pred, sigma = gp.predict(X, return_std=True)
+        
+        # log scaled conf interval 
+        ci_low = y_pred - norm.ppf((1 + confidence_level) / 2) * sigma
+        ci_high = y_pred + norm.ppf((1 + confidence_level) / 2) * sigma
+        
+        
+        # scaled back conf interval 
+        ci_low_original = np.exp(ci_low)
+        ci_high_original = np.exp(ci_high)
+
+        intervals[marker] = (np.min(ci_low_original),np.max(ci_high_original))
+
+    return intervals
+
+
+def apply_process(df_tops,confidence_level=0.96,log=False):
+
+    if log:
+        intervals = fit_lognormal_process(df_tops, confidence_level)
+    else:
+        intervals = fit_gaussian_process(df_tops, confidence_level)
+    for k,(v1,v2) in intervals.items():
+        print(k,round(v1,0),round(v2,0))
+    return intervals
+
 
 def predict_s2s(test_well,model):
         """Prediction with s2s Model"""
@@ -30,18 +106,13 @@ def predict_s2s(test_well,model):
         test_prob = test_prob.detach().numpy() 
         return test_prob 
 
-def is_increasing(lst):
-    """Check if the Final Prediction is in increasind order """
-    for i in range(len(lst) - 1):
-        if lst[i] >= lst[i + 1]:
-            return False
-    return True
 
-def get_markers_rocket_order_with_constraint(f_mean, 
+
+def get_markers_rocket_order_with_constraint(well,
+                                             f_mean, 
                                              f_std, 
-                                             df_tops,
+                                             intervals,
                                              df_test_log, 
-                                             well, 
                                              pred_column, 
                                              wsize, 
                                              input_variable, 
@@ -51,8 +122,8 @@ def get_markers_rocket_order_with_constraint(f_mean,
                                              rocket = None, 
                                              classifier_xgb = None, 
                                              classifier = None,
-                                             alpha=0.5, 
-                                             confidence_level=0.96):
+                                             constraint = True,
+                                            ):
     """ 
     Predict marker depths for one well with weighted blending of original and constrained predictions using Empirical CDF
     
@@ -60,6 +131,7 @@ def get_markers_rocket_order_with_constraint(f_mean,
     ----------
         f_mean [array]: Mean values of X_train used for normalization.
         f_std [array] : Standard deviation values of X_train used for normalization.
+        intervals : lower
         df_test_log [DataFrame]: DataFrame containing test data.
         well : index of the well being analyzed.
         pred_column [list]: Predicted column names >> ["MARCEL","SYLVAIN","CONRAD"]
@@ -113,51 +185,37 @@ def get_markers_rocket_order_with_constraint(f_mean,
 
     #=========Predict Depth For Each Marker with Weighted Blending=============#
     
-    # Get empirical CDF intervals
-    empirical_intervals = get_empirical_cdf_intervals(df_tops, confidence_level)
-    
-    #Constraint 1: Gaussian#
+
+    #Normal Prediction
     pred_m = []
     for top in pred_column:
         if top != 'None':
             md = df_wmn[df_wmn[top] == df_wmn[top].max()].Depth
-            ym_original = statistics.median(md)
+            ym = statistics.median(md)
+            pred_m.append(ym)
 
-            
-            # Retrieve the empirical interval for the current marker
-            lower_bound, upper_bound = empirical_intervals[top.upper()] 
-
-            # Adjust ym to fall within the empirical interval
-            ym_constrained = np.clip(ym_original,lower_bound,upper_bound)
-            ym_blended = alpha * ym_original + (1 - alpha) * ym_constrained
-            
-            previous_depth = ym_blended
-            pred_m.append(ym_blended)
-    
-
-    #Constraint 2: Next Marker must be deeper than the previous#
-    #This constarint is triggered only when the the depth order is wrong.#
-
-    if is_increasing(pred_m):  ## Check if pred_m is an increasing list
-        return pred_m, df_wm
-    else: 
-        previous_depth = pred_m[0]
-        for i,top in enumerate(pred_column):
-            if i>1:
+    #Constraint1: Gaussian
+    #Constraint2: Next Marker must be deeper than the previous#
+    if constraint:
+        pred_m = []
+        previous_depth = 0
+        # Get Gaussian Process intervals
+        for top in pred_column:
+            if top != 'None':
                 md = df_wmn[df_wmn[top] == df_wmn[top].max()].Depth
-                ym_original = statistics.median(md)
-                lower_bound, upper_bound = empirical_intervals[top.upper()] 
+                ym = statistics.median(md)
 
+                # Retrieve the interval for the current marker
+                lower_bound, upper_bound = intervals[top.upper()] 
+                # print(f"Interval For {top} is: {lower_bound,upper_bound}")
                 a = 1
-                while ym_original < previous_depth or ym_original>upper_bound:
+                while ym < lower_bound or ym>upper_bound or ym<previous_depth:
                     a+=1
                     md = df_wmn[df_wmn[top] == df_wmn[top].nlargest(a).iloc[-1]].Depth
-                    ym_original = statistics.median(md)
-
-                ym_constrained = np.clip(ym_original,lower_bound,upper_bound)
-                ym_blended = alpha * ym_original + (1 - alpha) * ym_constrained
-        
-                previous_depth = ym_blended
-                pred_m[i-1] = ym_blended
-
+                    ym = statistics.median(md)
+                
+                previous_depth = ym
+                pred_m.append(ym)
+        return pred_m, df_wm
+    else:
         return pred_m, df_wm

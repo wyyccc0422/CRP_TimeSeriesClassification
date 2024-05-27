@@ -56,9 +56,9 @@ class Decoder(nn.Module):
         out = self.fc(torch.cat((out, context), 1))
         return out, hidden
 
-class Seq2Seq(nn.Module):
-    def __init__(self, encoder, decoder, conv_output_dim, dense_output_dim, num_classes, device):
-        super(Seq2Seq, self).__init__()
+class CONVGRUA_SIMPLE(nn.Module):
+    def __init__(self, encoder, decoder, conv_output_dim, dense_output_dim,device,num_classes=4):
+        super(CONVGRUA_SIMPLE, self).__init__()
         self.encoder = encoder
         self.decoder = decoder
        
@@ -76,12 +76,6 @@ class Seq2Seq(nn.Module):
             nn.Linear(dense_output_dim, decoder_output_size)
         )
         
-        # self.dense_layers = nn.Sequential(
-        #     nn.Linear(conv_output_dim, dense_output_dim),
-        #     nn.ReLU(),
-        #     nn.Linear(dense_output_dim, decoder_output_size)
-        # )
-
         self.fc2 = nn.Linear(decoder_output_size, num_classes)  
         
         self.softmax = nn.Softmax(dim=-1)
@@ -116,5 +110,4 @@ class Seq2Seq(nn.Module):
         outputs = self.fc2(outputs) 
         # Apply softmax to get probability distribution
         outputs = self.softmax(outputs)
-        
         return outputs

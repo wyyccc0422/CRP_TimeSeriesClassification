@@ -5,6 +5,9 @@ from tqdm.notebook import tqdm
 import seaborn as sns
 import os
 import statistics
+from sklearn.linear_model import LogisticRegression
+import xgboost as xgb
+
 def dfwellgr(well_name, df_log, input_variable):
   """
    Returning a DataFrame that contains average GR values at each depth for one well_name.
@@ -250,6 +253,33 @@ def plot_simple(wellName,df_log,df_tops):
     plt.show()
 
 
+def get_classifier(X_train_transformed,y_train,X_test_transformed,y_test):
+    """Fit XGBoost and Logistic Classifier"""
+    eps = 1e-6
+    f_mean = X_train_transformed.mean(axis=0)
+    f_std = X_train_transformed.std(axis=0) + eps
+    X_train_norm = (X_train_transformed - f_mean) / f_std
+    X_valid_norm = (X_test_transformed - f_mean) / f_std
+    # print(X_train_norm.shape)
+
+    ##XGBoost
+    classifier_xgb = xgb.XGBClassifier(max_depth=5, n_estimators=100,n_jobs=-1)
+    classifier_xgb.fit(X_train_norm, y_train)
+    preds = classifier_xgb.predict(X_valid_norm)
+
+    print("XGBoost",(preds == y_test).mean())
+
+    ##Logistic
+    C = 1e-2
+    classifier = LogisticRegression(penalty='l2', C=C, n_jobs=-1)
+    classifier.fit(X_train_norm, y_train)
+    probas = classifier.predict_proba(X_train_norm)
+    train_score = classifier.score(X_train_norm, y_train)
+    val_score = classifier.score(X_valid_norm, y_test)
+    print('Logistic','{:2} eps: {:.2E}  C: {:.2E}   train_acc: {:.5f}  valid_acc: {:.5f}'.format(1, eps, C, train_score, val_score))
+
+    return f_mean, f_std,classifier_xgb, classifier
+
 def get_markers_rocket_order(f_mean,f_std,df_test_log, well, pred_column, wsize, input_variable, rocket, classifier_xgb,classifier, xgb):
     """ 
     Predict marker depths for one well without any constraints
@@ -344,3 +374,18 @@ def find_optimal_tolerance(df_test_tops, df_tops_pred):
         if recall == 1:
             return tolerance
         tolerance += 1
+
+def apply_evaluate(df_test_tops,df_tops_pred):
+        
+        tr = [20, 15, 10, 5]
+        for tolerance in tr:
+            recall, mae, df_result = recall_tops(df_test_tops,df_tops_pred,tolerance)
+            print("tolerance {0}, recall {1}, mae {2}".format(tolerance, recall, mae))
+
+        optimal_tolerance = find_optimal_tolerance(df_test_tops, df_tops_pred)
+
+        print(f"Largest Error MARCEL: {df_result['MARCEL_ae'].max()}")
+        print(f"Largest Error SYLVAIN: {df_result['SYLVAIN_ae'].max()}")
+        print(f"Largest Error CONRAD: {df_result['CONRAD_ae'].max()}")
+        print("🍺 Optimal Tolerance :", optimal_tolerance)
+        return optimal_tolerance,df_result

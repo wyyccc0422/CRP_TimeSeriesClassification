@@ -110,11 +110,11 @@ def mrmr_feature_selection(X, y, K=100):
         var_mask = VarianceThreshold().fit(X).get_support()
     except ValueError as e:
         print("Exception: ", e)
-        var_mask = np.ones(X.shape[1], dtype=np.bool)
+        var_mask = np.ones(X.shape[1], dtype=bool)
     X_v = X[:, var_mask]
-    or_idx = np.zeros(X.shape[1], dtype=np.bool)
+    or_idx = np.zeros(X.shape[1], dtype=bool)
     scores = np.nan_to_num(f_classif(X_v, y)[0], posinf=0, neginf=0).astype(np.float32)
-    selected_features_mask = np.zeros_like(X_v[0, :], dtype=np.bool)
+    selected_features_mask = np.zeros_like(X_v[0, :], dtype=bool)
     first_idx = np.argmax(scores)
     selected_features_mask[first_idx] = True
     corr = pearson_corr_numba(X_v, X_v[:, first_idx:first_idx + 1])
