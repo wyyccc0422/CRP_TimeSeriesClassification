@@ -57,20 +57,20 @@ class Decoder(nn.Module):
         return out, hidden
 
 class CONVGRUA_SIMPLE(nn.Module):
-    def __init__(self, encoder, decoder, conv_output_dim, dense_output_dim,device,num_classes=4):
+    def __init__(self, encoder, decoder, dense_output_dim,device,num_classes=4):
         super(CONVGRUA_SIMPLE, self).__init__()
         self.encoder = encoder
         self.decoder = decoder
        
         decoder_output_size = decoder.fc.out_features
         self.conv_layers = nn.Sequential(
-            nn.Conv1d(in_channels=decoder_output_size, out_channels=conv_output_dim, kernel_size=3, padding=1),
+            nn.Conv1d(in_channels=1, out_channels=1, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.Conv1d(in_channels=conv_output_dim, out_channels=conv_output_dim, kernel_size=3, padding=1),
+            nn.Conv1d(in_channels=1, out_channels=1, kernel_size=3, padding=1),
             nn.ReLU()
 )
         self.dense_layers = nn.Sequential(
-            nn.Linear(conv_output_dim, dense_output_dim),
+            nn.Linear(decoder_output_size, dense_output_dim),
             nn.LayerNorm(dense_output_dim),
             nn.ReLU(),
             nn.Linear(dense_output_dim, decoder_output_size)
@@ -99,11 +99,9 @@ class CONVGRUA_SIMPLE(nn.Module):
             decoder_input = output.unsqueeze(1)
 
         outputs = torch.mean(outputs, dim=1)
-        # outputs = outputs.transpose(1, 2).contiguous()
 
         # print(f"outputs size before conv: {outputs.size()}")
-        outputs = self.conv_layers(outputs.unsqueeze(2)).squeeze(2)
-        # outputs = self.conv_layers(outputs).transpose(1, 2)
+        outputs = self.conv_layers(outputs.unsqueeze(1)).squeeze(1)
         # print(f"outputs size after conv: {outputs.size()}")
 
         outputs = self.dense_layers(outputs)

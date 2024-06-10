@@ -56,7 +56,7 @@ def marker_ssig(well_name, df_wgr, marker, wsize):
   dseq = np.arange(int(md - (hd + std)), int(md + (hd + std)))
   seq = df_wgr[df_wgr.index.isin(dseq)].to_numpy() #create the series with gamma rays
  
-  mseg = [np.transpose(seq[i: i + wsize]) for i in range(len(seq) - wsize + 1)]
+  mseg = [np.transpose(seq[i: i + wsize]) for i in range(len(seq) - wsize + 1)]  #len(seq)-wsize always = 4 because std=2
 
   np_mseg = np.array(mseg)
 
@@ -74,7 +74,7 @@ def extract_signature_Xy(logs,tops,well_list,input_variable, wsize):
    -----------
     logs: DataFrame, [wellName,Latitude,Longitude,DEPTH,GR]
     tops: DataFrame,  depth of each marker for each well
-    well_list: np.array,  index for each well(unique)
+    well_list: np.array,  array contains well_index for good records
     input_variable: ['GR']
     wsize: window size
   Returns:
@@ -106,7 +106,7 @@ def extract_signature_Xy(logs,tops,well_list,input_variable, wsize):
           top_well_list = well_list[i][0] 
 
           #assign the well list for the marker and create good signatures for the marker
-          if well in top_well_list:
+          if well in top_well_list: #Check if the well is in the good well list
 
               marker = tops.loc[well][i] #marker depth
               np_mseg = marker_ssig(well, df_wgr, marker, wsize)
@@ -121,7 +121,6 @@ def extract_signature_Xy(logs,tops,well_list,input_variable, wsize):
         rd = np.random.randint(low=1000, high=max(tops.loc[well])) #choose a rd that is not in wtop(non marker)
 
       np_mseg = marker_ssig(well, df_wgr, rd, wsize)
-      
       y_seq = np.full(len(np_mseg), 0) #assign label 0 to non marker
       y.append(y_seq)
       X.append(np_mseg)
